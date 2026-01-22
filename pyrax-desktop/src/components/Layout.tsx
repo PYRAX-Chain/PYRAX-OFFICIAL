@@ -8,7 +8,8 @@ import {
   Network,
   Circle,
   Loader2,
-  Gauge
+  Gauge,
+  Brain
 } from 'lucide-react';
 import { useNodeStore } from '../stores/nodeStore';
 import { cn } from '../lib/utils';
@@ -20,6 +21,7 @@ const navItems = [
   { to: '/mining-dashboard', icon: Gauge, label: 'Mining Pro' },
   { to: '/explorer', icon: Search, label: 'Explorer' },
   { to: '/network', icon: Network, label: 'Network' },
+  { to: '/neurax', icon: Brain, label: 'NEURAX AI' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 

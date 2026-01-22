@@ -9,7 +9,7 @@ use jsonrpsee::core::{async_trait, RpcResult};
 use jsonrpsee::proc_macros::rpc;
 use tracing::info;
 
-use super::{RpcError, RpcBlock, RpcTransaction, RpcChainInfo, RpcPeerInfo, RpcMempoolInfo, RpcBlockTemplate, RpcSubmitResult, RpcBalance, RpcUtxo, RpcAddressTransactions, RpcAddressTx};
+use super::{RpcError, RpcBlock, RpcTransaction, RpcChainInfo, RpcPeerInfo, RpcMempoolInfo, RpcBlockTemplate, RpcSubmitResult, RpcBalance, RpcUtxo, RpcAddressTransactions, RpcAddressTx, RpcMiningInfo};
 use crate::storage::ChainDB;
 use crate::types::{H256, Address, Transaction, TxInput, TxOutput, Block, NetworkId, OutPoint};
 use crate::mempool::Mempool;
@@ -60,6 +60,10 @@ pub trait PyraxRpc {
     /// Submit mined block
     #[method(name = "pyrax_submitBlock")]
     async fn submit_block(&self, block_hex: String) -> RpcResult<RpcSubmitResult>;
+
+    /// Get mining info (for desktop app compatibility)
+    #[method(name = "pyrax_getMiningInfo")]
+    async fn get_mining_info(&self) -> RpcResult<RpcMiningInfo>;
     
     /// Create a test transaction (devnet only) - spends from one address to another
     #[method(name = "pyrax_createTestTransaction")]
@@ -68,6 +72,10 @@ pub trait PyraxRpc {
     /// Get network peer information
     #[method(name = "pyrax_getNetworkInfo")]
     async fn get_network_info(&self) -> RpcResult<super::RpcNetworkInfo>;
+
+    /// Get peer list (for desktop app compatibility)
+    #[method(name = "pyrax_getPeers")]
+    async fn get_peers(&self) -> RpcResult<Vec<RpcPeerInfo>>;
 
     /// Simple health check - returns immediately without database access
     #[method(name = "pyrax_health")]
@@ -359,6 +367,18 @@ impl PyraxRpcServer for RpcServerImpl {
             }),
         }
     }
+
+    async fn get_mining_info(&self) -> RpcResult<RpcMiningInfo> {
+        let tip = self.db.get_tip();
+        Ok(RpcMiningInfo {
+            mining: false, // Node doesn't mine directly, desktop app handles mining
+            hashrate: 0.0,
+            difficulty: 1.0, // Devnet difficulty
+            blocks_found: 0,
+            network_hashrate: 0.0,
+            current_height: tip.height,
+        })
+    }
     
     async fn create_test_transaction(&self, from_address: String, to_address: String, amount: u64) -> RpcResult<RpcSubmitResult> {
         // Only allow on devnet
@@ -530,6 +550,32 @@ impl PyraxRpcServer for RpcServerImpl {
                 mesh_connections: vec![],
                 relay_circuits: vec![],
             })
+        }
+    }
+
+    async fn get_peers(&self) -> RpcResult<Vec<RpcPeerInfo>> {
+        if let Some(ref registry) = self.peer_registry {
+            let peers = registry.get_peers().await;
+            let rpc_peers: Vec<RpcPeerInfo> = peers.iter().map(|p| {
+                RpcPeerInfo {
+                    peer_id: p.peer_id.clone(),
+                    address: p.address.clone(),
+                    ip: p.ip.clone(),
+                    port: p.port,
+                    protocol: format!("/pyrax/{}/1.0.0", self.network_id.name()),
+                    direction: p.direction.to_string(),
+                    connected_secs: p.connected_at.elapsed().as_secs(),
+                    last_seen: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64 - p.last_seen.elapsed().as_millis() as u64,
+                    version: p.client_version.clone(),
+                    block_height: p.best_height,
+                }
+            }).collect();
+            Ok(rpc_peers)
+        } else {
+            Ok(vec![])
         }
     }
 

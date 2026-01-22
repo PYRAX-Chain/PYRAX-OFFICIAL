@@ -254,6 +254,18 @@ pub struct RpcAddressTx {
     pub confirmations: u64,
 }
 
+/// Mining info response for desktop app
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RpcMiningInfo {
+    pub mining: bool,
+    pub hashrate: f64,
+    pub difficulty: f64,
+    pub blocks_found: u64,
+    pub network_hashrate: f64,
+    pub current_height: u64,
+}
+
 /// Debug P2P state for troubleshooting peer count mismatches
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -170,9 +170,9 @@ export default function LogViewer() {
   };
 
   return (
-    <div className="bg-black rounded-xl border border-gray-800 overflow-hidden flex flex-col h-[400px] shadow-2xl">
-      {/* Terminal Header - macOS style */}
-      <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-b from-gray-800 to-gray-900 border-b border-gray-800">
+    <div className="bg-dark-900/80 backdrop-blur rounded-2xl border border-dark-600/50 overflow-hidden flex flex-col h-[350px] shadow-2xl">
+      {/* Terminal Header - Modern glass style */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-dark-800/80 border-b border-dark-600/50">
         <div className="flex items-center gap-3">
           {/* Traffic light buttons */}
           <div className="flex items-center gap-1.5">
@@ -236,7 +236,7 @@ export default function LogViewer() {
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="px-4 py-2 bg-gray-900/80 border-b border-gray-800 flex flex-wrap gap-4 text-xs font-mono">
+        <div className="px-4 py-2 bg-dark-800/50 border-b border-dark-600/50 flex flex-wrap gap-4 text-xs font-mono">
           <div className="flex items-center gap-2">
             <span className="text-gray-600">level:</span>
             {(['info', 'warn', 'error', 'debug'] as const).map((level) => (
@@ -273,15 +273,11 @@ export default function LogViewer() {
         </div>
       )}
 
-      {/* Log Content - Terminal style */}
+      {/* Log Content - Clean terminal style */}
       <div 
         ref={logContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed bg-black"
-        style={{ 
-          backgroundImage: 'linear-gradient(rgba(0, 255, 0, 0.02) 1px, transparent 1px)',
-          backgroundSize: '100% 20px'
-        }}
+        className="flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed bg-dark-900/50"
       >
         {paused ? (
           <div className="flex items-center justify-center h-full text-yellow-500 font-mono">
@@ -299,7 +295,7 @@ export default function LogViewer() {
             {displayLogs.map((log, index) => (
               <div 
                 key={log.id} 
-                className="flex items-start gap-1 py-[2px] hover:bg-green-500/5 group"
+                className="flex items-start gap-1 py-[2px] hover:bg-pyrax-500/5 group"
               >
                 {/* Line number */}
                 <span className="text-gray-700 w-8 text-right flex-shrink-0 select-none group-hover:text-gray-600">

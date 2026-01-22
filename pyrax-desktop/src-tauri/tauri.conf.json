@@ -7,7 +7,7 @@
   },
   "package": {
     "productName": "Inferno Node",
-    "version": "0.3.3"
+    "version": "0.4.0"
   },
   "tauri": {
     "allowlist": {
@@ -78,7 +78,12 @@
         }
       },
       "deb": {
-        "depends": ["libwebkit2gtk-4.0-37", "libgtk-3-0"]
+        "depends": [
+          "libwebkit2gtk-4.0-37 | libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1 | libappindicator3-1",
+          "librsvg2-common"
+        ]
       },
       "appimage": {
         "bundleMediaFramework": false

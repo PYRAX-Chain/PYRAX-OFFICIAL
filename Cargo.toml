@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.3"
+version = "0.3.20"
 edition = "2021"
 authors = ["PYRAX Team <dev@pyrax.org>"]
 license = "MIT OR Apache-2.0"

@@ -110,45 +110,48 @@ export interface Network {
   blockExplorer?: string;
 }
 
+// Network configurations with correct chain IDs
+// Note: Client-side code uses /api/rpc proxy which handles actual RPC routing
+// These URLs are for reference/fallback only - the API proxy uses correct endpoints
 export const NETWORKS: Network[] = [
   {
     id: 'mainnet',
     name: 'Mainnet',
-    chainId: 1,
+    chainId: 7227, // PYRAX Mainnet chain ID
     symbol: 'PYRAX',
     streams: {
-      A: 'http://localhost:8545', // ASIC Stream
-      B: 'http://localhost:8546', // GPU Stream  
-      C: 'http://localhost:8547', // ZK Stream
+      A: '/api/rpc', // Uses API proxy for CORS handling
+      B: '/api/rpc',
+      C: '/api/rpc',
     },
-    evmSidechain: 'http://localhost:8550',
+    evmSidechain: '/api/rpc',
     blockExplorer: 'https://explorer.pyrax.org',
   },
   {
     id: 'testnet',
     name: 'Testnet',
-    chainId: 2,
+    chainId: 7226, // PYRAX Testnet chain ID
     symbol: 'tPYRAX',
     streams: {
-      A: 'http://localhost:18545',
-      B: 'http://localhost:18546',
-      C: 'http://localhost:18547',
+      A: '/api/rpc',
+      B: '/api/rpc',
+      C: '/api/rpc',
     },
-    evmSidechain: 'http://localhost:18550',
+    evmSidechain: '/api/rpc',
     blockExplorer: 'https://testnet.explorer.pyrax.org',
   },
   {
     id: 'devnet',
     name: 'Devnet',
-    chainId: 3,
+    chainId: 7225, // PYRAX Devnet chain ID (CORRECT!)
     symbol: 'dPYRAX',
     streams: {
-      A: 'http://localhost:28545',
-      B: 'http://localhost:28546',
-      C: 'http://localhost:28547',
+      A: '/api/rpc',
+      B: '/api/rpc',
+      C: '/api/rpc',
     },
-    evmSidechain: 'http://localhost:28550',
-    blockExplorer: 'https://devnet.explorer.pyrax.org',
+    evmSidechain: '/api/rpc',
+    blockExplorer: 'https://explorer.pyrax-devnet.org',
   },
 ];
 

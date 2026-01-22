@@ -17,6 +17,7 @@ use commands::{
     dashboard::DashboardArgs, docker::DockerCommand, init::InitArgs, logs::LogsArgs,
     remote::RemoteCommand, service::ServiceCommand, status::StatusArgs,
     cloud::CloudCommand, mesh::MeshCommand, snapshot::SnapshotCommand,
+    update::UpdateArgs,
 };
 
 const BANNER: &str = r#"
@@ -196,6 +197,9 @@ enum Commands {
         #[command(subcommand)]
         command: SnapshotCommand,
     },
+
+    /// Update inferno-cli to latest or specific version
+    Update(UpdateArgs),
 }
 
 #[derive(Subcommand)]
@@ -379,6 +383,10 @@ async fn main() -> Result<()> {
 
         Commands::Snapshot { command } => {
             commands::snapshot::run(command).await?;
+        }
+
+        Commands::Update(args) => {
+            commands::update::run(args).await?;
         }
     }
 

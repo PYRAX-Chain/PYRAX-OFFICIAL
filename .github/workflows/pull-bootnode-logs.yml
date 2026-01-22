@@ -1,0 +1,202 @@
+name: Pull Bootnode Logs
+
+on:
+  workflow_dispatch:
+    inputs:
+      lines:
+        description: 'Number of log lines to pull'
+        required: false
+        default: '500'
+
+env:
+  BOOTNODE_1: 209.38.137.105
+  BOOTNODE_2: 137.184.118.228
+
+jobs:
+  pull-logs:
+    name: Pull Logs from Bootnodes
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host keys
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ env.BOOTNODE_1 }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ env.BOOTNODE_2 }} >> ~/.ssh/known_hosts
+
+      - name: Pull Bootnode 1 Logs
+        run: |
+          echo "╔═══════════════════════════════════════════════════════════════╗"
+          echo "║     BOOTNODE 1 (${{ env.BOOTNODE_1 }}) - PYRAX Node Logs      ║"
+          echo "╚═══════════════════════════════════════════════════════════════╝"
+          
+          ssh root@${{ env.BOOTNODE_1 }} << 'EOF'
+          echo ""
+          echo "=== SYSTEM STATUS ==="
+          echo "Hostname: $(hostname)"
+          echo "Uptime: $(uptime)"
+          echo "Memory:"
+          free -h
+          echo ""
+          
+          echo "=== PYRAX-NODE SERVICE STATUS ==="
+          systemctl status pyrax-node --no-pager || echo "Service status check failed"
+          echo ""
+          
+          echo "=== LISTENING PORTS ==="
+          ss -tlnp | grep -E '(28545|30303|30304|3333|3334|28547)' || echo "No expected ports listening"
+          echo ""
+          
+          echo "=== FIREWALL STATUS ==="
+          ufw status verbose 2>/dev/null || echo "UFW not available"
+          echo ""
+          
+          echo "=== PYRAX-NODE VERSION ==="
+          pyrax-node --version 2>/dev/null || echo "pyrax-node not found"
+          echo ""
+          
+          echo "=== LAST ${{ inputs.lines }} LINES OF PYRAX-NODE LOGS ==="
+          journalctl -u pyrax-node --no-pager -n ${{ inputs.lines }} 2>/dev/null || echo "No journalctl logs"
+          echo ""
+          
+          echo "=== P2P CONNECTIVITY TEST ==="
+          echo "Testing RPC endpoint..."
+          curl -s -X POST -H "Content-Type: application/json" \
+            --connect-timeout 5 --max-time 10 \
+            --data '{"jsonrpc":"2.0","method":"pyrax_getNetworkInfo","params":[],"id":1}' \
+            http://127.0.0.1:28545 2>/dev/null | jq . || echo "RPC unreachable or failed"
+          echo ""
+          
+          echo "=== PEER CONNECTIONS (raw) ==="
+          curl -s -X POST -H "Content-Type: application/json" \
+            --connect-timeout 5 --max-time 10 \
+            --data '{"jsonrpc":"2.0","method":"pyrax_debugP2PState","params":[],"id":1}' \
+            http://127.0.0.1:28545 2>/dev/null | jq . || echo "P2P debug unreachable"
+          echo ""
+          
+          echo "=== CHAIN INFO ==="
+          curl -s -X POST -H "Content-Type: application/json" \
+            --connect-timeout 5 --max-time 10 \
+            --data '{"jsonrpc":"2.0","method":"pyrax_getChainInfo","params":[],"id":1}' \
+            http://127.0.0.1:28545 2>/dev/null | jq . || echo "Chain info unreachable"
+          echo ""
+          
+          echo "=== PROCESS INFO ==="
+          ps aux | grep pyrax-node | grep -v grep || echo "pyrax-node not running"
+          echo ""
+          
+          echo "=== RECENT ERRORS IN LOGS ==="
+          journalctl -u pyrax-node --no-pager -n 1000 2>/dev/null | grep -iE "(error|fail|panic|crash|refused|timeout|disconnect)" | tail -50 || echo "No errors found"
+          EOF
+
+      - name: Pull Bootnode 2 Logs
+        run: |
+          echo ""
+          echo "╔═══════════════════════════════════════════════════════════════╗"
+          echo "║     BOOTNODE 2 (${{ env.BOOTNODE_2 }}) - PYRAX Node Logs      ║"
+          echo "╚═══════════════════════════════════════════════════════════════╝"
+          
+          ssh root@${{ env.BOOTNODE_2 }} << 'EOF'
+          echo ""
+          echo "=== SYSTEM STATUS ==="
+          echo "Hostname: $(hostname)"
+          echo "Uptime: $(uptime)"
+          echo "Memory:"
+          free -h
+          echo ""
+          
+          echo "=== PYRAX-NODE SERVICE STATUS ==="
+          systemctl status pyrax-node --no-pager || echo "Service status check failed"
+          echo ""
+          
+          echo "=== LISTENING PORTS ==="
+          ss -tlnp | grep -E '(28545|30303|30304|3333|3334|28547)' || echo "No expected ports listening"
+          echo ""
+          
+          echo "=== FIREWALL STATUS ==="
+          ufw status verbose 2>/dev/null || echo "UFW not available"
+          echo ""
+          
+          echo "=== PYRAX-NODE VERSION ==="
+          pyrax-node --version 2>/dev/null || echo "pyrax-node not found"
+          echo ""
+          
+          echo "=== LAST ${{ inputs.lines }} LINES OF PYRAX-NODE LOGS ==="
+          journalctl -u pyrax-node --no-pager -n ${{ inputs.lines }} 2>/dev/null || echo "No journalctl logs"
+          echo ""
+          
+          echo "=== P2P CONNECTIVITY TEST ==="
+          echo "Testing RPC endpoint..."
+          curl -s -X POST -H "Content-Type: application/json" \
+            --connect-timeout 5 --max-time 10 \
+            --data '{"jsonrpc":"2.0","method":"pyrax_getNetworkInfo","params":[],"id":1}' \
+            http://127.0.0.1:28545 2>/dev/null | jq . || echo "RPC unreachable or failed"
+          echo ""
+          
+          echo "=== PEER CONNECTIONS (raw) ==="
+          curl -s -X POST -H "Content-Type: application/json" \
+            --connect-timeout 5 --max-time 10 \
+            --data '{"jsonrpc":"2.0","method":"pyrax_debugP2PState","params":[],"id":1}' \
+            http://127.0.0.1:28545 2>/dev/null | jq . || echo "P2P debug unreachable"
+          echo ""
+          
+          echo "=== CHAIN INFO ==="
+          curl -s -X POST -H "Content-Type: application/json" \
+            --connect-timeout 5 --max-time 10 \
+            --data '{"jsonrpc":"2.0","method":"pyrax_getChainInfo","params":[],"id":1}' \
+            http://127.0.0.1:28545 2>/dev/null | jq . || echo "Chain info unreachable"
+          echo ""
+          
+          echo "=== PROCESS INFO ==="
+          ps aux | grep pyrax-node | grep -v grep || echo "pyrax-node not running"
+          echo ""
+          
+          echo "=== RECENT ERRORS IN LOGS ==="
+          journalctl -u pyrax-node --no-pager -n 1000 2>/dev/null | grep -iE "(error|fail|panic|crash|refused|timeout|disconnect)" | tail -50 || echo "No errors found"
+          EOF
+
+      - name: Cross-Node Connectivity Test
+        run: |
+          echo ""
+          echo "╔═══════════════════════════════════════════════════════════════╗"
+          echo "║     CROSS-NODE CONNECTIVITY TEST                              ║"
+          echo "╚═══════════════════════════════════════════════════════════════╝"
+          
+          echo "=== Testing Bootnode 1 → Bootnode 2 P2P ==="
+          ssh root@${{ env.BOOTNODE_1 }} << 'EOF'
+          echo "From Bootnode 1, testing connectivity to Bootnode 2..."
+          nc -zv -w5 ${{ env.BOOTNODE_2 }} 30303 2>&1 || echo "TCP 30303 unreachable"
+          nc -zvu -w5 ${{ env.BOOTNODE_2 }} 30304 2>&1 || echo "UDP 30304 unreachable"
+          curl -s --connect-timeout 5 http://${{ env.BOOTNODE_2 }}:28545 -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"pyrax_health","params":[],"id":1}' || echo "RPC unreachable"
+          EOF
+          
+          echo ""
+          echo "=== Testing Bootnode 2 → Bootnode 1 P2P ==="
+          ssh root@${{ env.BOOTNODE_2 }} << 'EOF'
+          echo "From Bootnode 2, testing connectivity to Bootnode 1..."
+          nc -zv -w5 ${{ env.BOOTNODE_1 }} 30303 2>&1 || echo "TCP 30303 unreachable"
+          nc -zvu -w5 ${{ env.BOOTNODE_1 }} 30304 2>&1 || echo "UDP 30304 unreachable"
+          curl -s --connect-timeout 5 http://${{ env.BOOTNODE_1 }}:28545 -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"pyrax_health","params":[],"id":1}' || echo "RPC unreachable"
+          EOF
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "╔═══════════════════════════════════════════════════════════════╗"
+          echo "║     LOG COLLECTION COMPLETE                                   ║"
+          echo "╚═══════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "Bootnode 1: ${{ env.BOOTNODE_1 }}"
+          echo "Bootnode 2: ${{ env.BOOTNODE_2 }}"
+          echo ""
+          echo "Review the logs above for:"
+          echo "  1. Service status (running/stopped)"
+          echo "  2. Port listening status"
+          echo "  3. Peer count and mesh status"
+          echo "  4. Error messages in logs"
+          echo "  5. Cross-node connectivity"

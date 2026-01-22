@@ -209,6 +209,40 @@ impl RpcClient {
     pub async fn get_address_transactions(&self, address: &str, limit: Option<u32>) -> Result<AddressTransactionsResponse, RpcError> {
         self.request("pyrax_getAddressTransactions", (address, limit)).await
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Explorer Helper Methods
+    // ═══════════════════════════════════════════════════════════════
+
+    /// Get peer count
+    pub async fn get_peer_count(&self) -> Result<u64, RpcError> {
+        let peers: Vec<PeerResponse> = self.get_peers().await.unwrap_or_default();
+        Ok(peers.len() as u64)
+    }
+
+    /// Get pending transaction count from mempool
+    pub async fn get_pending_transaction_count(&self) -> Result<u64, RpcError> {
+        let mempool = self.get_mempool_info().await?;
+        Ok(mempool.size as u64)
+    }
+
+    /// Get gas price (returns hex string for compatibility)
+    pub async fn get_gas_price(&self) -> Result<String, RpcError> {
+        // PYRAX uses fixed fee model, return a default
+        Ok("0x3b9aca00".to_string()) // 1 gwei
+    }
+
+    /// Get contract code at address
+    pub async fn get_code(&self, _address: &str) -> Result<String, RpcError> {
+        // PYRAX UTXO model doesn't have contract storage
+        Ok("0x".to_string())
+    }
+
+    /// Get balance as hex string
+    pub async fn get_balance_hex(&self, address: &str) -> Result<String, RpcError> {
+        let result: BalanceResponse = self.request("pyrax_getBalance", (address,)).await?;
+        Ok(format!("0x{:x}", result.balance))
+    }
 }
 
 fn parse_hex_u64(s: &str) -> Result<u64, RpcError> {

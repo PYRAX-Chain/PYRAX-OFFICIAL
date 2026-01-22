@@ -8,7 +8,7 @@ on:
       - '**.md'
       - '.gitignore'
       - 'LICENSE'
-
+  # Manual trigger only - NO tag triggers to prevent duplicate deploys
   workflow_dispatch:
 
 env:
@@ -139,14 +139,26 @@ jobs:
           echo "╚═══════════════════════════════════════════════════════════════╝"
           
           # Ensure swap exists to prevent OOM during Rust compilation
+          # 8GB swap needed for compiling wasmtime and heavy crates
           echo "=== ENSURING SWAP SPACE FOR COMPILATION ==="
+          SWAP_SIZE="8G"
+          if [ -f /swapfile ]; then
+            # Check if existing swap is large enough (at least 8GB)
+            CURRENT_SIZE=$(ls -l /swapfile 2>/dev/null | awk '{print $5}')
+            if [ "$CURRENT_SIZE" -lt 8589934592 ]; then
+              echo "Existing swap too small, recreating with 8GB..."
+              swapoff /swapfile 2>/dev/null || true
+              rm -f /swapfile
+            fi
+          fi
+          
           if [ ! -f /swapfile ]; then
-            echo "Creating 4GB swap file..."
-            fallocate -l 4G /swapfile
+            echo "Creating 8GB swap file..."
+            fallocate -l $SWAP_SIZE /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=8192
             chmod 600 /swapfile
             mkswap /swapfile
             swapon /swapfile
-            echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
             echo "Swap created and enabled"
           else
             # Ensure swap is active
@@ -175,13 +187,8 @@ jobs:
           echo "=== BUILDING PYRAX-NODE ==="
           cd /opt/pyrax
           
-          # Add swap space to prevent OOM during compilation
-          echo "=== ADDING SWAP SPACE ==="
-          if [ ! -f /swapfile ]; then
-            fallocate -l 4G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=4096
-            chmod 600 /swapfile
-            mkswap /swapfile
-          fi
+          # Verify swap is active
+          echo "=== VERIFYING SWAP SPACE ==="
           swapon /swapfile 2>/dev/null || true
           free -h
           
@@ -190,9 +197,14 @@ jobs:
           cargo clean -p pyrax-node 2>/dev/null || true
           rm -f /opt/pyrax/target/release/pyrax-node
           
-          # Build using locked dependencies from Cargo.lock (DO NOT update - API breaking changes)
-          # Use -j 1 to limit parallel jobs and prevent OOM on 8GB servers
-          cargo build --release --locked -p pyrax-node -j 1
+          # Build pyrax-node with memory-optimized settings
+          # -j 1: Single job to minimize memory usage
+          # CARGO_BUILD_JOBS=1: Ensure no parallel codegen
+          # codegen-units=1: Reduce memory per compilation unit
+          echo "=== BUILDING PYRAX-NODE (memory-optimized) ==="
+          export CARGO_BUILD_JOBS=1
+          export RUSTFLAGS="-C codegen-units=1"
+          cargo build --release -p pyrax-node -j 1
           
           # Stop running service and kill any orphan processes before replacing binary
           echo "=== STOPPING PYRAX-NODE SERVICE ==="
@@ -209,6 +221,13 @@ jobs:
             sleep 2
           fi
           
+          # Free up memory after build before service operations
+          echo "=== FREEING MEMORY AFTER BUILD ==="
+          sync
+          echo 3 > /proc/sys/vm/drop_caches
+          sleep 2
+          free -h
+          
           # Install binary (workspace root target directory)
           echo "=== INSTALLING PYRAX-NODE BINARY ==="
           cp -f /opt/pyrax/target/release/pyrax-node /usr/local/bin/pyrax-node
@@ -219,11 +238,19 @@ jobs:
           echo "=== DEPENDENCY VERSIONS ==="
           grep -A1 'name = "libp2p"' /opt/pyrax/Cargo.lock | head -4 || true
           
-          # CRITICAL: Wipe old data to regenerate genesis with current code
-          echo "=== WIPING OLD CHAIN DATA FOR FRESH GENESIS ==="
-          rm -rf /var/lib/pyrax/devnet/*
+          # CRITICAL: Selective wipe - preserve node identity for stable peer IDs
+          echo "=== WIPING CHAIN DATA (PRESERVING NODE IDENTITY) ==="
           mkdir -p /var/lib/pyrax/devnet
-          echo "Chain data wiped - fresh genesis will be created on start"
+          # Preserve node.key for stable peer ID across deploys
+          # Wipe only chain data, blocks, and cache - NOT identity
+          rm -rf /var/lib/pyrax/devnet/chaindata 2>/dev/null || true
+          rm -rf /var/lib/pyrax/devnet/blocks 2>/dev/null || true
+          rm -rf /var/lib/pyrax/devnet/utxo 2>/dev/null || true
+          rm -rf /var/lib/pyrax/devnet/index 2>/dev/null || true
+          rm -f /var/lib/pyrax/devnet/*.db 2>/dev/null || true
+          rm -f /var/lib/pyrax/devnet/*.log 2>/dev/null || true
+          # Keep: /var/lib/pyrax/node.key (stable peer ID)
+          echo "Chain data wiped - node identity preserved for mesh stability"
           
           # Create systemd service for pyrax-node
           echo "=== CONFIGURING PYRAX-NODE SYSTEMD SERVICE ==="
@@ -254,11 +281,18 @@ jobs:
           WantedBy=multi-user.target
           SERVICE
           
+          # Reload and enable service (with memory safety)
+          echo "=== ENABLING SYSTEMD SERVICE ==="
+          sync
+          echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+          sleep 1
           systemctl daemon-reload
+          sleep 1
           systemctl enable pyrax-node
           
           # Restart pyrax-node service
           echo "=== RESTARTING PYRAX-NODE SERVICE ==="
+          sleep 2
           systemctl restart pyrax-node
           
           # Wait for node to fully start (it takes time to initialize)
@@ -301,17 +335,29 @@ jobs:
           echo "║     PYRAX Bootnode 2 Deployment (P2P Redundancy)              ║"
           echo "╚═══════════════════════════════════════════════════════════════╝"
           
-          # Ensure swap exists
+          # Ensure 8GB swap exists to prevent OOM during compilation
+          echo "=== ENSURING SWAP SPACE ==="
+          SWAP_SIZE="8G"
+          if [ -f /swapfile ]; then
+            CURRENT_SIZE=$(ls -l /swapfile 2>/dev/null | awk '{print $5}')
+            if [ "$CURRENT_SIZE" -lt 8589934592 ]; then
+              echo "Existing swap too small, recreating with 8GB..."
+              swapoff /swapfile 2>/dev/null || true
+              rm -f /swapfile
+            fi
+          fi
+          
           if [ ! -f /swapfile ]; then
-            echo "Creating 4GB swap file..."
-            fallocate -l 4G /swapfile
+            echo "Creating 8GB swap file..."
+            fallocate -l $SWAP_SIZE /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=8192
             chmod 600 /swapfile
             mkswap /swapfile
             swapon /swapfile
-            echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
           else
             swapon /swapfile 2>/dev/null || true
           fi
+          free -h
           
           cd /opt/pyrax
           
@@ -335,10 +381,11 @@ jobs:
           ufw allow 28545/tcp comment 'RPC'
           echo "y" | ufw enable || true
           
-          # Build pyrax-node
-          echo "=== BUILDING PYRAX-NODE ==="
+          # Build pyrax-node with memory-optimized settings
+          echo "=== BUILDING PYRAX-NODE (memory-optimized) ==="
           cargo clean -p pyrax-node 2>/dev/null || true
-          # Use -j 1 to limit parallel jobs and prevent OOM on 8GB servers
+          export CARGO_BUILD_JOBS=1
+          export RUSTFLAGS="-C codegen-units=1"
           cargo build --release -p pyrax-node -j 1
           
           # Stop and replace binary
@@ -349,9 +396,14 @@ jobs:
           cp -f /opt/pyrax/target/release/pyrax-node /usr/local/bin/pyrax-node
           chmod +x /usr/local/bin/pyrax-node
           
-          # Wipe old data for fresh genesis
-          rm -rf /var/lib/pyrax/devnet/*
+          # Selective wipe - preserve node identity for stable peer IDs
           mkdir -p /var/lib/pyrax/devnet
+          rm -rf /var/lib/pyrax/devnet/chaindata 2>/dev/null || true
+          rm -rf /var/lib/pyrax/devnet/blocks 2>/dev/null || true
+          rm -rf /var/lib/pyrax/devnet/utxo 2>/dev/null || true
+          rm -rf /var/lib/pyrax/devnet/index 2>/dev/null || true
+          rm -f /var/lib/pyrax/devnet/*.db 2>/dev/null || true
+          rm -f /var/lib/pyrax/devnet/*.log 2>/dev/null || true
           
           # Create systemd service (connects to Bootnode 1 as peer)
           cat > /etc/systemd/system/pyrax-node.service << 'SERVICE'
@@ -378,8 +430,14 @@ jobs:
           WantedBy=multi-user.target
           SERVICE
           
+          # Reload and enable service (with memory safety)
+          sync
+          echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+          sleep 1
           systemctl daemon-reload
+          sleep 1
           systemctl enable pyrax-node
+          sleep 2
           systemctl restart pyrax-node
           
           # Wait for startup
@@ -504,6 +562,11 @@ jobs:
           echo "=== BUILDING IMAGES (with cache) ==="
           # Build only web services (node is managed by systemd)
           docker compose -f $COMPOSE_FILE build website faucet docs explorer marketing nginx postgres redis
+          
+          echo "=== STOPPING EXISTING CONTAINERS ==="
+          # Stop and remove existing containers to avoid conflicts
+          docker compose -f $COMPOSE_FILE down --remove-orphans 2>/dev/null || true
+          docker rm -f pyrax-website pyrax-faucet pyrax-docs pyrax-explorer pyrax-marketing pyrax-nginx pyrax-postgres pyrax-redis 2>/dev/null || true
           
           echo "=== STARTING WEB SERVICES ==="
           # Start only web services - NOT the node (we use systemd for that)

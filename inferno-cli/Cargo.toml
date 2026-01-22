@@ -1,6 +1,6 @@
 [package]
 name = "inferno-cli"
-version = "0.3.3"
+version = "0.3.20"
 edition = "2021"
 authors = ["PYRAX Chain <team@pyrax.org>"]
 description = "Inferno CLI - Terminal-based node management for PYRAX blockchain"
@@ -72,6 +72,11 @@ futures = "0.3"
 async-trait = "0.1"
 once_cell = "1.19"
 ctrlc = "3.4"
+
+# Archive handling for self-update
+flate2 = "1.0"
+tar = "0.4"
+zip = "0.6"
 
 # Windows-specific
 [target.'cfg(windows)'.dependencies]

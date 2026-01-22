@@ -109,7 +109,7 @@ services:
       - NODE_ENV=production
       - PYRAX_NETWORK=devnet
       - FAUCET_PRIVATE_KEY=${FAUCET_PRIVATE_KEY}
-      - DEVNET_RPC_URL=${DEVNET_RPC_URL:-http://node:8545}
+      - DEVNET_RPC_URL=http://host.docker.internal:28545
       - FAUCET_AMOUNT=${FAUCET_AMOUNT:-1000}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001"]
@@ -145,8 +145,8 @@ services:
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_NETWORK=devnet
-        - NEXT_PUBLIC_RPC_URL=${NEXT_PUBLIC_RPC_URL:-https://rpc.pyrax-devnet.org}
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://api.pyrax-devnet.org}
+        - NEXT_PUBLIC_RPC_URL=https://rpc.pyrax-devnet.org
+        - NEXT_PUBLIC_API_URL=https://api.pyrax-devnet.org
         - NEXT_PUBLIC_EXPLORER_URL=https://explorer.pyrax-devnet.org
     container_name: pyrax-explorer
     restart: unless-stopped
@@ -155,6 +155,17 @@ services:
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_NETWORK=devnet
+      # Server-side RPC endpoints for API routes (uses host.docker.internal to reach host node)
+      - DEVNET_RPC_URL=http://host.docker.internal:28545
+      - STREAM_A_RPC=http://host.docker.internal:28545
+      - STREAM_B_RPC=http://host.docker.internal:28545
+      - STREAM_C_RPC=http://host.docker.internal:28545
+      # Public RPC URLs for client-side (uses actual DNS)
+      - NEXT_PUBLIC_RPC_URL=https://rpc.pyrax-devnet.org
+      - NEXT_PUBLIC_API_URL=https://api.pyrax-devnet.org
+      # Bootnode IPs for direct access
+      - BOOTNODE1_IP=209.38.137.105
+      - BOOTNODE2_IP=137.184.118.228
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

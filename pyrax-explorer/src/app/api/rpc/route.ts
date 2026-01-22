@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Use environment variable or detect if running in Docker
-const DEVNET_RPC = process.env.DEVNET_RPC_URL || 'http://209.38.137.105:28545';
-const TESTNET_RPC = process.env.TESTNET_RPC_URL || 'http://127.0.0.1:18545';
-const MAINNET_RPC = process.env.MAINNET_RPC_URL || 'http://127.0.0.1:8545';
+// RPC endpoints for PYRAX Devnet
+// In Docker: Uses host.docker.internal to reach the host pyrax-node (running via systemd)
+// Public DNS: rpc.pyrax-devnet.org:28545 (Bootnode 1), rpc2.pyrax-devnet.org:28545 (Bootnode 2)
+const DEVNET_RPC = process.env.DEVNET_RPC_URL || 'http://host.docker.internal:28545';
+const TESTNET_RPC = process.env.TESTNET_RPC_URL || 'http://host.docker.internal:18545';
+const MAINNET_RPC = process.env.MAINNET_RPC_URL || 'http://host.docker.internal:8545';
 
 const RPC_ENDPOINTS: Record<string, string> = {
   mainnet: MAINNET_RPC,
@@ -15,17 +17,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const network = request.headers.get('x-network') || 'devnet';
-    const streamId = request.headers.get('x-stream') || 'A';
+    // Note: Stream header is accepted but currently all streams use the same node
+    // Future: When separate Stream B/C nodes are deployed, re-enable stream-specific routing
     
-    // Determine endpoint based on network and stream
-    let endpoint = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.devnet;
-    
-    // Adjust port for different streams (A=x545, B=x546, C=x547)
-    if (streamId === 'B') {
-      endpoint = endpoint.replace(/545$/, '546');
-    } else if (streamId === 'C') {
-      endpoint = endpoint.replace(/545$/, '547');
-    }
+    // Use the same endpoint for all streams (single node deployment)
+    const endpoint = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.devnet;
 
     const startTime = Date.now();
     

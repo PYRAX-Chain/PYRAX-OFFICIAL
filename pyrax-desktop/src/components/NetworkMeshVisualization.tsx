@@ -17,6 +17,21 @@ interface NodePosition {
   isBootnode: boolean;
 }
 
+// Bootnode IPs for devnet
+const BOOTNODE_IPS = ['209.38.137.105', '137.184.118.228'];
+
+// Helper to check if an IP is a bootnode
+const isBootnodeIP = (ip: string): boolean => BOOTNODE_IPS.includes(ip);
+
+// Helper to extract IP from multiaddr format
+const extractIPFromAddress = (address: string): string => {
+  const match = address.match(/\/ip4\/([^/]+)/);
+  if (match) return match[1];
+  const colonMatch = address.match(/^([^:]+):/);
+  if (colonMatch) return colonMatch[1];
+  return address;
+};
+
 export default function NetworkMeshVisualization() {
   const { status, peers } = useNodeStore();
   const [meshData, setMeshData] = useState<NetworkInfo | null>(null);
@@ -81,9 +96,9 @@ export default function NetworkMeshVisualization() {
         id: peer.id,
         x: centerX + radius * Math.cos(angle),
         y: centerY + radius * Math.sin(angle),
-        label: peer.id.slice(0, 8),
+        label: peer.id.slice(-6),
         isLocal: false,
-        isBootnode: peer.ip === '209.38.137.105' || peer.ip === '137.184.118.228',
+        isBootnode: isBootnodeIP(peer.ip) || isBootnodeIP(extractIPFromAddress((peer as any).address || '')),
       });
     });
 

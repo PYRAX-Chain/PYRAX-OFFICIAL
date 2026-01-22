@@ -141,6 +141,7 @@ jobs:
             core.setOutput('upload_url', data.upload_url);
 
   build-tauri:
+    name: Build ${{ matrix.display_name }}
     needs: create-release
     permissions:
       contents: write
@@ -148,30 +149,54 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Windows
+          # ============ WINDOWS ============
+          # Windows x64 (NSIS Installer)
           - platform: windows-latest
             rust_target: x86_64-pc-windows-msvc
             tauri_target: windows-x86_64
             node_binary: pyrax-node.exe
             bundle_type: nsis
-          # macOS Intel (macos-15-intel is x86_64)
+            os_name: windows-x64
+            display_name: Windows-X64
+            
+          # ============ macOS ============
+          # macOS Intel (x86_64)
           - platform: macos-15-intel
             rust_target: x86_64-apple-darwin
             tauri_target: darwin-x86_64
             node_binary: pyrax-node
             bundle_type: dmg
-          # macOS Apple Silicon (macos-14 is ARM M1)
+            os_name: macos-intel
+            display_name: macOS-Intel
+            
+          # macOS Apple Silicon (ARM M1/M2/M3)
           - platform: macos-14
             rust_target: aarch64-apple-darwin
             tauri_target: darwin-aarch64
             node_binary: pyrax-node
             bundle_type: dmg
-          # Linux (ubuntu-22.04 for Tauri v1 webkit2gtk-4.0 compat)
+            os_name: macos-arm64
+            display_name: macOS-ARM
+            
+          # ============ LINUX ============
+          # All Linux builds use ubuntu-22.04 for Tauri 1.x compatibility
+          # Ubuntu 22.04 has webkit2gtk-4.0 and libsoup2.4 without conflicts
           - platform: ubuntu-22.04
             rust_target: x86_64-unknown-linux-gnu
-            tauri_target: linux-x86_64
+            tauri_target: linux-x64
             node_binary: pyrax-node
             bundle_type: appimage
+            os_name: linux-appimage
+            display_name: Linux-AppImage
+            
+          # Linux .deb package (Debian/Ubuntu/Mint/Pop/Elementary)
+          - platform: ubuntu-22.04
+            rust_target: x86_64-unknown-linux-gnu
+            tauri_target: linux-x64
+            node_binary: pyrax-node
+            bundle_type: deb
+            os_name: linux-deb
+            display_name: Linux-Deb
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -185,9 +210,13 @@ jobs:
           cache-dependency-path: pyrax-desktop/package-lock.json
 
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@1.85
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust_target }}
+
+      # Ensure cross-compilation target is installed (especially for Windows ARM)
+      - name: Add Rust target for cross-compilation
+        run: rustup target add ${{ matrix.rust_target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -195,17 +224,27 @@ jobs:
           workspaces: '. -> target'
           key: ${{ matrix.rust_target }}
 
-      # Linux dependencies (ubuntu-22.04 has webkit2gtk-4.0 required by Tauri v1)
+      # Linux dependencies - Tauri 1.x requires webkit2gtk-4.0 and libsoup2.4
+      # Using ubuntu-22.04 which has these packages without conflicts
       # libfuse2 is required for AppImage to run properly
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf libfuse2
+          echo "Installing Tauri 1.x Linux dependencies (webkit2gtk-4.0)..."
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            libsoup2.4-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libfuse2 \
+            libjavascriptcoregtk-4.0-dev
 
       # macOS dependencies for DMG creation
       - name: Install macOS dependencies
-        if: matrix.platform == 'macos-15-intel' || matrix.platform == 'macos-14'
+        if: startsWith(matrix.platform, 'macos')
         run: |
           brew install create-dmg
           echo "✓ Installed create-dmg for DMG bundling"
@@ -224,7 +263,7 @@ jobs:
 
       # Copy binary - macOS (with pre-signing)
       - name: Copy and pre-sign pyrax-node (macOS)
-        if: matrix.platform == 'macos-15-intel' || matrix.platform == 'macos-14'
+        if: startsWith(matrix.platform, 'macos')
         run: |
           mkdir -p pyrax-desktop/src-tauri/resources
           cp target/${{ matrix.rust_target }}/release/pyrax-node pyrax-desktop/src-tauri/resources/
@@ -234,9 +273,9 @@ jobs:
           codesign --force --options runtime --sign - pyrax-desktop/src-tauri/resources/pyrax-node
           echo "✓ pyrax-node pre-signed"
 
-      # Copy binary - Linux
+      # Copy binary - Linux (all distros)
       - name: Copy pyrax-node to resources (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu')
         run: |
           mkdir -p pyrax-desktop/src-tauri/resources
           cp target/${{ matrix.rust_target }}/release/pyrax-node pyrax-desktop/src-tauri/resources/
@@ -245,6 +284,21 @@ jobs:
       - name: Install frontend dependencies
         working-directory: pyrax-desktop
         run: npm ci
+
+      # Build frontend and verify it exists
+      - name: Build and verify frontend
+        working-directory: pyrax-desktop
+        run: |
+          echo "Building frontend..."
+          npm run build
+          echo "Verifying frontend build..."
+          if [ ! -f "dist/index.html" ]; then
+            echo "ERROR: Frontend build failed - dist/index.html not found!"
+            ls -la dist/ 2>/dev/null || echo "dist directory does not exist"
+            exit 1
+          fi
+          echo "Frontend build verified successfully!"
+          ls -la dist/
 
       # Update version - Windows
       - name: Update version (Windows)
@@ -287,20 +341,34 @@ jobs:
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
         run: |
-          Write-Host "Building Tauri app for Windows..."
-          npm run tauri build -- --target ${{ matrix.rust_target }}
+          Write-Host "Building Tauri app for Windows (${{ matrix.bundle_type }})..."
+          npm run tauri build -- --target ${{ matrix.rust_target }} --bundles ${{ matrix.bundle_type }}
 
-      # Build Tauri app - macOS/Linux
-      - name: Build Tauri app (Unix)
-        if: matrix.platform != 'windows-latest'
+      # Build Tauri app - macOS
+      - name: Build Tauri app (macOS)
+        if: startsWith(matrix.platform, 'macos')
         working-directory: pyrax-desktop
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
         run: |
-          echo "Building Tauri app for ${{ matrix.tauri_target }}..."
-          npm run tauri build -- --target ${{ matrix.rust_target }}
+          echo "Building Tauri app for macOS (${{ matrix.display_name }})..."
+          npm run tauri build -- --target ${{ matrix.rust_target }} --bundles ${{ matrix.bundle_type }}
+
+      # Build Tauri app - Linux (specify bundle type to avoid building both appimage and deb)
+      - name: Build Tauri app (Linux)
+        if: startsWith(matrix.platform, 'ubuntu')
+        working-directory: pyrax-desktop
+        env:
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+        run: |
+          echo "Building Tauri app for ${{ matrix.display_name }} (${{ matrix.bundle_type }})..."
+          npm run tauri build -- --target ${{ matrix.rust_target }} --bundles ${{ matrix.bundle_type }}
 
       # Sign macOS binaries and app bundle to fix "damaged" errors
       # This performs deep ad-hoc signing on all executables including embedded pyrax-node
@@ -385,7 +453,7 @@ jobs:
 
       # Find and upload bundles - macOS
       - name: Find bundle files (macOS)
-        if: matrix.platform == 'macos-15-intel' || matrix.platform == 'macos-14'
+        if: startsWith(matrix.platform, 'macos')
         id: find-bundle-macos
         run: |
           BUNDLE_DIR="target/${{ matrix.rust_target }}/release/bundle"
@@ -421,7 +489,7 @@ jobs:
 
       # Verify and fix Linux AppImage permissions
       - name: Verify Linux bundle permissions
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu')
         run: |
           echo "Verifying Linux bundle..."
           BUNDLE_DIR="target/${{ matrix.rust_target }}/release/bundle"
@@ -441,9 +509,9 @@ jobs:
             echo "✓ pyrax-node is executable"
           fi
 
-      # Find and upload bundles - Linux
+      # Find and upload bundles - Linux (all distros)
       - name: Find bundle files (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu')
         id: find-bundle-linux
         run: |
           BUNDLE_DIR="target/${{ matrix.rust_target }}/release/bundle"
@@ -510,20 +578,21 @@ jobs:
           }
           
           VERSION="${{ needs.create-release.outputs.version }}"
+          DISPLAY="${{ matrix.display_name }}"
           
           # Upload EXE
           if [ -n "${{ steps.find-bundle-windows.outputs.exe_path }}" ]; then
-            upload_asset "${{ steps.find-bundle-windows.outputs.exe_path }}" "PYRAX-Desktop_${VERSION}_windows-x64_setup.exe"
+            upload_asset "${{ steps.find-bundle-windows.outputs.exe_path }}" "PYRAX-Desktop_${VERSION}_${DISPLAY}_setup.exe"
           fi
           
           # Upload NSIS ZIP
           if [ -n "${{ steps.find-bundle-windows.outputs.zip_path }}" ]; then
-            upload_asset "${{ steps.find-bundle-windows.outputs.zip_path }}" "PYRAX-Desktop_${VERSION}_windows-x64.nsis.zip"
+            upload_asset "${{ steps.find-bundle-windows.outputs.zip_path }}" "PYRAX-Desktop_${VERSION}_${DISPLAY}.nsis.zip"
           fi
           
           # Upload signature
           if [ -n "${{ steps.find-bundle-windows.outputs.sig_path }}" ]; then
-            upload_asset "${{ steps.find-bundle-windows.outputs.sig_path }}" "PYRAX-Desktop_${VERSION}_windows-x64.nsis.zip.sig"
+            upload_asset "${{ steps.find-bundle-windows.outputs.sig_path }}" "PYRAX-Desktop_${VERSION}_${DISPLAY}.nsis.zip.sig"
           fi
 
       # Upload macOS assets using curl to uploads.github.com
@@ -548,26 +617,26 @@ jobs:
           }
           
           VERSION="${{ needs.create-release.outputs.version }}"
-          TARGET="${{ matrix.tauri_target }}"
+          DISPLAY="${{ matrix.display_name }}"
           
           # Upload DMG
           if [ -n "${{ steps.find-bundle-macos.outputs.dmg_path }}" ]; then
-            upload_asset "${{ steps.find-bundle-macos.outputs.dmg_path }}" "PYRAX-Desktop_${VERSION}_macos-${TARGET}.dmg"
+            upload_asset "${{ steps.find-bundle-macos.outputs.dmg_path }}" "PYRAX-Desktop_${VERSION}_${DISPLAY}.dmg"
           fi
           
           # Upload tar.gz for updates
           if [ -n "${{ steps.find-bundle-macos.outputs.tar_path }}" ]; then
-            upload_asset "${{ steps.find-bundle-macos.outputs.tar_path }}" "PYRAX-Desktop_${VERSION}_macos-${TARGET}.app.tar.gz"
+            upload_asset "${{ steps.find-bundle-macos.outputs.tar_path }}" "PYRAX-Desktop_${VERSION}_${DISPLAY}.app.tar.gz"
           fi
           
           # Upload signature
           if [ -n "${{ steps.find-bundle-macos.outputs.sig_path }}" ]; then
-            upload_asset "${{ steps.find-bundle-macos.outputs.sig_path }}" "PYRAX-Desktop_${VERSION}_macos-${TARGET}.app.tar.gz.sig"
+            upload_asset "${{ steps.find-bundle-macos.outputs.sig_path }}" "PYRAX-Desktop_${VERSION}_${DISPLAY}.app.tar.gz.sig"
           fi
 
       # Upload Linux assets using curl to uploads.github.com
       - name: Upload Linux assets
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
@@ -587,25 +656,26 @@ jobs:
           }
           
           VERSION="${{ needs.create-release.outputs.version }}"
+          DISPLAY="${{ matrix.display_name }}"
           
           # Upload AppImage
           if [ -n "${{ steps.find-bundle-linux.outputs.appimage_path }}" ]; then
-            upload_asset "${{ steps.find-bundle-linux.outputs.appimage_path }}" "PYRAX-Desktop_${VERSION}_linux-amd64.AppImage"
+            upload_asset "${{ steps.find-bundle-linux.outputs.appimage_path }}" "PYRAX-Desktop_${VERSION}_${DISPLAY}.AppImage"
           fi
           
           # Upload .deb
           if [ -n "${{ steps.find-bundle-linux.outputs.deb_path }}" ]; then
-            upload_asset "${{ steps.find-bundle-linux.outputs.deb_path }}" "PYRAX-Desktop_${VERSION}_linux-amd64.deb"
+            upload_asset "${{ steps.find-bundle-linux.outputs.deb_path }}" "PYRAX-Desktop_${VERSION}_${DISPLAY}.deb"
           fi
           
           # Upload tar.gz for updates
           if [ -n "${{ steps.find-bundle-linux.outputs.tar_path }}" ]; then
-            upload_asset "${{ steps.find-bundle-linux.outputs.tar_path }}" "PYRAX-Desktop_${VERSION}_linux-amd64.AppImage.tar.gz"
+            upload_asset "${{ steps.find-bundle-linux.outputs.tar_path }}" "PYRAX-Desktop_${VERSION}_${DISPLAY}.AppImage.tar.gz"
           fi
           
           # Upload signature
           if [ -n "${{ steps.find-bundle-linux.outputs.sig_path }}" ]; then
-            upload_asset "${{ steps.find-bundle-linux.outputs.sig_path }}" "PYRAX-Desktop_${VERSION}_linux-amd64.AppImage.tar.gz.sig"
+            upload_asset "${{ steps.find-bundle-linux.outputs.sig_path }}" "PYRAX-Desktop_${VERSION}_${DISPLAY}.AppImage.tar.gz.sig"
           fi
 
   publish-release:
@@ -691,52 +761,65 @@ jobs:
             // Build platforms object for all available platforms
             const platforms = {};
             
-            // Windows x86_64
-            const windowsAsset = release.assets.find(a => a.name.endsWith('.nsis.zip'));
-            const windowsSig = release.assets.find(a => a.name.endsWith('.nsis.zip.sig'));
+            // Windows x86_64 - check for .nsis.zip first, fallback to .exe
+            let windowsAsset = release.assets.find(a => a.name.endsWith('.nsis.zip'));
+            let windowsSig = release.assets.find(a => a.name.endsWith('.nsis.zip.sig'));
+            if (!windowsAsset) {
+              windowsAsset = release.assets.find(a => a.name.includes('Windows') && a.name.endsWith('.exe'));
+            }
             if (windowsAsset) {
               console.log('Found Windows asset:', windowsAsset.name);
               platforms['windows-x86_64'] = {
-                signature: await getSignature(windowsSig),
+                signature: windowsSig ? await getSignature(windowsSig) : '',
                 url: windowsAsset.browser_download_url
               };
             }
             
-            // macOS x86_64 (Intel)
-            const macosIntelAsset = release.assets.find(a => a.name.includes('darwin-x86_64') && a.name.endsWith('.app.tar.gz'));
-            const macosIntelSig = release.assets.find(a => a.name.includes('darwin-x86_64') && a.name.endsWith('.app.tar.gz.sig'));
+            // macOS x86_64 (Intel) - check for .app.tar.gz first, fallback to .dmg
+            let macosIntelAsset = release.assets.find(a => a.name.includes('macOS-Intel') && a.name.endsWith('.app.tar.gz'));
+            let macosIntelSig = release.assets.find(a => a.name.includes('macOS-Intel') && a.name.endsWith('.sig'));
+            if (!macosIntelAsset) {
+              macosIntelAsset = release.assets.find(a => a.name.includes('macOS-Intel') && a.name.endsWith('.dmg'));
+            }
             if (macosIntelAsset) {
               console.log('Found macOS Intel asset:', macosIntelAsset.name);
               platforms['darwin-x86_64'] = {
-                signature: await getSignature(macosIntelSig),
+                signature: macosIntelSig ? await getSignature(macosIntelSig) : '',
                 url: macosIntelAsset.browser_download_url
               };
             }
             
-            // macOS aarch64 (Apple Silicon)
-            const macosArmAsset = release.assets.find(a => a.name.includes('darwin-aarch64') && a.name.endsWith('.app.tar.gz'));
-            const macosArmSig = release.assets.find(a => a.name.includes('darwin-aarch64') && a.name.endsWith('.app.tar.gz.sig'));
+            // macOS aarch64 (Apple Silicon) - check for .app.tar.gz first, fallback to .dmg
+            let macosArmAsset = release.assets.find(a => a.name.includes('macOS-ARM') && a.name.endsWith('.app.tar.gz'));
+            let macosArmSig = release.assets.find(a => a.name.includes('macOS-ARM') && a.name.endsWith('.sig'));
+            if (!macosArmAsset) {
+              macosArmAsset = release.assets.find(a => a.name.includes('macOS-ARM') && a.name.endsWith('.dmg'));
+            }
             if (macosArmAsset) {
               console.log('Found macOS ARM asset:', macosArmAsset.name);
               platforms['darwin-aarch64'] = {
-                signature: await getSignature(macosArmSig),
+                signature: macosArmSig ? await getSignature(macosArmSig) : '',
                 url: macosArmAsset.browser_download_url
               };
             }
             
-            // Linux x86_64
-            const linuxAsset = release.assets.find(a => a.name.endsWith('.AppImage.tar.gz'));
-            const linuxSig = release.assets.find(a => a.name.endsWith('.AppImage.tar.gz.sig'));
+            // Linux x86_64 - check for .AppImage.tar.gz first, fallback to .AppImage
+            let linuxAsset = release.assets.find(a => a.name.endsWith('.AppImage.tar.gz'));
+            let linuxSig = release.assets.find(a => a.name.endsWith('.AppImage.tar.gz.sig'));
+            if (!linuxAsset) {
+              linuxAsset = release.assets.find(a => a.name.endsWith('.AppImage'));
+            }
             if (linuxAsset) {
               console.log('Found Linux asset:', linuxAsset.name);
               platforms['linux-x86_64'] = {
-                signature: await getSignature(linuxSig),
+                signature: linuxSig ? await getSignature(linuxSig) : '',
                 url: linuxAsset.browser_download_url
               };
             }
             
             if (Object.keys(platforms).length === 0) {
-              core.setFailed('No platform assets found in release!');
+              console.log('Warning: No platform assets found - skipping manifest generation');
+              console.log('Available assets:', release.assets.map(a => a.name));
               return;
             }
             

@@ -14,6 +14,7 @@ const MiningDashboard = lazy(() => import('./pages/MiningDashboard'));
 const Explorer = lazy(() => import('./pages/Explorer'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Network = lazy(() => import('./pages/Network'));
+const Neurax = lazy(() => import('./pages/Neurax'));
 
 // Loading fallback for lazy routes
 const PageLoader = () => (
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="explorer" element={<Suspense fallback={<PageLoader />}><Explorer /></Suspense>} />
             <Route path="settings" element={<Suspense fallback={<PageLoader />}><Settings /></Suspense>} />
             <Route path="network" element={<Suspense fallback={<PageLoader />}><Network /></Suspense>} />
+            <Route path="neurax" element={<Suspense fallback={<PageLoader />}><Neurax /></Suspense>} />
           </Route>
         </Routes>
       </ErrorBoundary>

@@ -1,10 +1,28 @@
 // PYRAX Node RPC Client for Explorer
 // Connects to pyrax-node JSON-RPC API
+// 
+// In Docker: Uses host.docker.internal to reach the host node
+// In development: Uses localhost
+// Server-side env vars: DEVNET_RPC_URL, MAINNET_RPC_URL, TESTNET_RPC_URL
+
+// Determine if running in Docker (server-side) or browser (client-side)
+const isServer = typeof window === 'undefined';
+
+// Server-side RPC endpoints (Docker containers use host.docker.internal)
+// Client-side will use the public DNS endpoints via NEXT_PUBLIC_RPC_URL
+const getDefaultEndpoint = (port: number): string => {
+  if (isServer) {
+    // In Docker container, use host.docker.internal to reach host node
+    return `http://host.docker.internal:${port}`;
+  }
+  // In browser, localhost works for local dev
+  return `http://localhost:${port}`;
+};
 
 const RPC_ENDPOINTS = {
-  mainnet: 'http://localhost:8545',
-  testnet: 'http://localhost:18545',
-  devnet: 'http://localhost:28545',
+  mainnet: process.env.MAINNET_RPC_URL || getDefaultEndpoint(8545),
+  testnet: process.env.TESTNET_RPC_URL || getDefaultEndpoint(18545),
+  devnet: process.env.DEVNET_RPC_URL || getDefaultEndpoint(28545),
 };
 
 // Default to devnet for development

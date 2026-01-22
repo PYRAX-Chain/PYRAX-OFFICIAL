@@ -10,3 +10,4 @@ pub mod status;
 pub mod cloud;
 pub mod mesh;
 pub mod snapshot;
+pub mod update;

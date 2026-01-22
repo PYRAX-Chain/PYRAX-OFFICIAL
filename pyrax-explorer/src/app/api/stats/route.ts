@@ -44,7 +44,8 @@ async function rpcCall(url: string, method: string, params: unknown[] = []): Pro
 
 export async function GET() {
   try {
-    const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'http://localhost:28545'
+    // Use server-side env var, fallback to host.docker.internal for Docker deployment
+    const RPC_URL = process.env.DEVNET_RPC_URL || 'http://host.docker.internal:28545'
     
     // Fetch chain info and mempool info (these RPC methods exist)
     const [chainInfo, mempoolInfo] = await Promise.all([

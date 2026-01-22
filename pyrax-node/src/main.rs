@@ -405,6 +405,8 @@ async fn main() -> anyhow::Result<()> {
         info!("MASS ADOPTION MODE: {:?} | WebSocket: {} | Auto-fallback: {}", 
             connection_mode, args.enable_websocket, args.auto_port_fallback);
         
+        // Use stability-tuned defaults for P2P config
+        // Aggressive intervals cause peer churn and mesh instability
         let p2p_config = P2PConfig {
             listen_addr: args.p2p_addr.clone(),
             bootstrap_peers: args.peer.clone(),
@@ -412,10 +414,10 @@ async fn main() -> anyhow::Result<()> {
             min_peers: 30,
             max_peers: 60,
             max_concurrent_dials: 5,
-            dial_timeout_secs: 10,
-            ping_interval_secs: 15,
-            peer_refresh_interval_secs: 30,
-            peer_reevaluate_interval_secs: 60,
+            dial_timeout_secs: 15,       // Stability: 15s (was 10s - too aggressive)
+            ping_interval_secs: 45,      // Stability: 45s (was 15s - ping storms)
+            peer_refresh_interval_secs: 120,  // Stability: 120s (was 30s - too aggressive)
+            peer_reevaluate_interval_secs: 300, // Stability: 300s (was 60s - constant churn)
             node_key_path: args.node_key.clone(),
             // Mass adoption network settings
             connection_mode,

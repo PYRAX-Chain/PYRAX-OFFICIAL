@@ -91,6 +91,7 @@ libloading = "0.8"
 walkdir = "2.4"
 num-bigint = "0.4"
 num-traits = "0.2"
+num_cpus = "1.16"
 
 # Types
 ethereum-types = "0.14"
