@@ -15,7 +15,7 @@ export interface ChainStatus {
 
 export interface NodeInfo {
     endpoint: string;
-    height: number;
+    block_height: number;
     reachable: boolean;
     syncing: boolean;
     peer_count: number;

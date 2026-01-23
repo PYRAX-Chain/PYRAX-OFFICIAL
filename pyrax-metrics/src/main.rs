@@ -16,6 +16,7 @@ mod api;
 mod state;
 mod crawler;
 mod alert;
+mod scheduler;
 
 use config::Config;
 use state::AppState;
@@ -70,7 +71,7 @@ async fn main() -> Result<()> {
     let node_crawler = crawler::NodeCrawler::new(
         config.crawler.clone(),
         config.nodes.endpoints.clone(),
-    );
+    ).with_app_state(app_state.clone());
     let discovered_nodes = node_crawler.discovered_nodes();
     app_state.set_discovered_nodes(discovered_nodes);
     
@@ -85,6 +86,9 @@ async fn main() -> Result<()> {
         info!("Sending startup notification to Telegram...");
         app_state.alert_manager().send_alert("🤖 System", "<b>PYRAX Observer Started</b>\nMonitoring initialized.").await;
     }
+
+    // Create scheduler for periodic tasks
+    let scheduler = scheduler::Scheduler::new(app_state.clone());
 
     // Start all services concurrently
     tokio::select! {
@@ -106,6 +110,11 @@ async fn main() -> Result<()> {
         result = api_server.run() => {
             if let Err(e) = result {
                 error!("API server error: {}", e);
+            }
+        }
+        result = scheduler.run() => {
+            if let Err(e) = result {
+                error!("Scheduler error: {}", e);
             }
         }
         _ = tokio::signal::ctrl_c() => {

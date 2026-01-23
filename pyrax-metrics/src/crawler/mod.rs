@@ -4,6 +4,7 @@
 
 use crate::config::CrawlerConfig;
 use crate::observer::{RpcClient, PeerInfo};
+use crate::state::AppState;
 use anyhow::Result;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -38,6 +39,7 @@ pub struct NodeCrawler {
     seed_endpoints: Vec<String>,
     discovered: SharedDiscoveredNodes,
     seen_peers: Arc<RwLock<HashSet<String>>>,
+    app_state: Option<AppState>,
 }
 
 impl NodeCrawler {
@@ -48,7 +50,14 @@ impl NodeCrawler {
             seed_endpoints,
             discovered: Arc::new(RwLock::new(Vec::new())),
             seen_peers: Arc::new(RwLock::new(HashSet::new())),
+            app_state: None,
         }
+    }
+    
+    /// Set app state for alerts
+    pub fn with_app_state(mut self, app_state: AppState) -> Self {
+        self.app_state = Some(app_state);
+        self
     }
     
     /// Get shared reference to discovered nodes
@@ -141,7 +150,7 @@ impl NodeCrawler {
                 // Format: IP:P2P_PORT -> http://IP:RPC_PORT (assume RPC is P2P_PORT - 1)
                 if let Some(endpoint) = self.addr_to_rpc_endpoint(remote_addr) {
                     let node = DiscoveredNode {
-                        endpoint,
+                        endpoint: endpoint.clone(),
                         peer_id: peer.id.clone(),
                         last_seen: timestamp,
                         reachable: true, // Will be verified on next probe
@@ -150,11 +159,30 @@ impl NodeCrawler {
                     };
                     
                     // Check if not already discovered
-                    let mut discovered = self.discovered.write();
-                    if !discovered.iter().any(|n| n.peer_id == peer.id) {
-                        if discovered.len() < self.config.max_nodes {
+                    let is_new;
+                    {
+                        let mut discovered = self.discovered.write();
+                        is_new = !discovered.iter().any(|n| n.peer_id == peer.id);
+                        if is_new && discovered.len() < self.config.max_nodes {
                             info!("Discovered new node: {} (height: {})", node.endpoint, node.best_height);
-                            discovered.push(node);
+                            discovered.push(node.clone());
+                        }
+                    }
+                    
+                    // Send alert for new node (outside lock)
+                    if is_new {
+                        if let Some(ref state) = self.app_state {
+                            let msg = format!(
+                                "🌐 <b>New Node Discovered</b>\nEndpoint: {}\nHeight: {}\nVersion: {}",
+                                endpoint,
+                                peer.best_height,
+                                peer.version.as_deref().unwrap_or("unknown")
+                            );
+                            let am = state.alert_manager();
+                            // Fire and forget the alert
+                            tokio::spawn(async move {
+                                am.send_alert("New Node", &msg).await;
+                            });
                         }
                     }
                 }

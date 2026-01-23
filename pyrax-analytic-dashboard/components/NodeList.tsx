@@ -42,7 +42,7 @@ export function NodeList({ nodes }: NodeListProps) {
                                     {node.endpoint.replace('http://', '').replace('https://', '')}
                                 </td>
                                 <td className="px-6 py-4 text-right tabular-nums font-medium">
-                                    #{node.height.toLocaleString()}
+                                    #{(node.block_height || 0).toLocaleString()}
                                 </td>
                                 <td className="px-6 py-4 text-center">
                                     <div className={cn(
