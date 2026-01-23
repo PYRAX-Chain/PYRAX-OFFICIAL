@@ -2,11 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; // I need to create card ui? 
-// Actually I don't have shadcn card components. I'll use standard divs or make a wrapper.
-// I'll stick to raw recharts inside a div container matching my other cards.
-
-// Re-write without shadcn imports
 import { ChainStatus } from "@/lib/types";
 
 interface LiveChartProps {
