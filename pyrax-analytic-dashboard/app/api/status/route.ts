@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic'; // Prevent caching
 
 export async function GET() {
-    // Default to localhost for development if not set
+    // Point to your PYRAX Metrics service
     const VPS_URL = process.env.VPS_API_URL || 'http://localhost:8080';
 
     try {
@@ -23,8 +23,9 @@ export async function GET() {
     } catch (error) {
         console.error('Proxy Error:', error);
         return NextResponse.json(
-            { error: 'Failed to fetch status from VPS' },
+            { error: 'Failed to fetch status from PYRAX Metrics API' },
             { status: 502 }
         );
     }
 }
+

@@ -6,6 +6,20 @@ interface NodeListProps {
     nodes: NodeInfo[];
 }
 
+// Bootnode IPs to mask for security
+const BOOTNODE_IPS = ['209.38.137.105'];
+
+function getDisplayName(endpoint: string): string {
+    const cleanEndpoint = endpoint.replace('http://', '').replace('https://', '');
+    
+    // Check if this is a bootnode
+    if (BOOTNODE_IPS.some(ip => cleanEndpoint.startsWith(ip))) {
+        return 'Bootnode';
+    }
+    
+    return cleanEndpoint;
+}
+
 export function NodeList({ nodes }: NodeListProps) {
     if (nodes.length === 0) {
         return (
@@ -39,7 +53,7 @@ export function NodeList({ nodes }: NodeListProps) {
                         {nodes.map((node) => (
                             <tr key={node.endpoint} className="hover:bg-secondary/30 transition-colors">
                                 <td className="px-6 py-4 font-mono truncate max-w-[200px]" title={node.endpoint}>
-                                    {node.endpoint.replace('http://', '').replace('https://', '')}
+                                    {getDisplayName(node.endpoint)}
                                 </td>
                                 <td className="px-6 py-4 text-right tabular-nums font-medium">
                                     #{(node.block_height || 0).toLocaleString()}
